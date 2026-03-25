@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ビートシート フラッシュカード</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#f5a623" />
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="BeatCards" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0b0b14; }
+    #root { min-height: 100%; }
+  </style>
+
+  <!-- CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.3/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useCallback } = React;
+
+    // ═══════════════════════════════════════════════════════════════
+    // BEAT DATA — パラサイト
+    // ═══════════════════════════════════════════════════════════════
+    const INITIAL_CARDS = [
+      { id:"p-1",  work:"パラサイト", no:1,  name:"オープニングイメージ",
+        func:"物語全体の構造（状態・階層・テーマ）を視覚的に圧縮して提示する",
+        result:"キム一家が社会の最下層に位置していることを確定させる" },
+      { id:"p-2",  work:"パラサイト", no:2,  name:"テーマ提示",
+        func:"物語全体で検証される命題を提示し、後半での反転・回収の基準を作る",
+        result:"「上昇はコントロールできるのか」という問いが物語にセットされる" },
+      { id:"p-3",  work:"パラサイト", no:3,  name:"セットアップ（導入）",
+        func:"人物・関係・能力・制約を配置し、物語の因果が成立する条件を整える",
+        result:"家族の能力と貧困状態が提示され、「上層へ入り込める可能性」が成立" },
+      { id:"p-4",  work:"パラサイト", no:4,  name:"きっかけ（発端）",
+        func:"現状の均衡を壊し、物語を不可逆に動かす外的要因を投入する",
+        result:"上層へ侵入するルートができる" },
+      { id:"p-5",  work:"パラサイト", no:5,  name:"葛藤（迷い）",
+        func:"行動に対する抵抗や摩擦を生み、決断の重みを成立させる（省略・転移可）",
+        result:"葛藤を描かないことで彼らの切実さを見せる" },
+      { id:"p-6",  work:"パラサイト", no:6,  name:"第1転換点",
+        func:"主人公が新しいルールの世界に踏み込み、元の状態に戻れなくなる",
+        result:"主人公たちが望んだ世界の入口に立ち、新しい欲望も立ち上がる" },
+      { id:"p-7",  work:"パラサイト", no:7,  name:"サブプロット開始",
+        func:"主軸とは別の角度からテーマを補強・対比する関係性を動かす",
+        result:"下層からの上昇という幻想を決定づける" },
+      { id:"p-8",  work:"パラサイト", no:8,  name:"展開部（メインの見せ場）",
+        func:"成功や拡張を連続させ、後の崩壊に向けた期待と落差の土台を作る",
+        result:"偽装による安定が成立するが、崩壊要因が同時に蓄積される" },
+      { id:"p-9",  work:"パラサイト", no:9,  name:"中間点（ミッドポイント）",
+        func:"前半の前提を否定し、物語のルールや力関係を反転させる",
+        result:"地下の発見により、生命の危機にさらされる" },
+      { id:"p-10", work:"パラサイト", no:10, name:"危機の進行",
+        func:"反転後の世界で問題を加速させ、コントロール不能な状態へ導く",
+        result:"隠していた情報が連鎖的に露出し、偽装による支配が維持できない状態に入る" },
+      { id:"p-11", work:"パラサイト", no:11, name:"喪失（どん底）",
+        func:"それまで積み上げたものが決定的に失われる（外的・内的どちらでも可）",
+        result:"上層の幻想が崩れ、社会存在としての危機は冒頭より深刻になる" },
+      { id:"p-12", work:"パラサイト", no:12, name:"内省（絶望）",
+        func:"主人公が状況や自分の前提を見直す（認識の更新 or 更新失敗）",
+        result:"構造への認識のズレが露出し、統一されていた行動原理が崩れる" },
+      { id:"p-13", work:"パラサイト", no:13, name:"第2転換点",
+        func:"認識に基づき最終行動へ踏み込ませる（正しい／誤ったどちらでも可）",
+        result:"誤った前提のまま最終行動が選択され、破局へ不可逆に進む状態になる" },
+      { id:"p-14", work:"パラサイト", no:14, name:"クライマックス",
+        func:"対立が顕在化し、行動によって構造の結論が出る",
+        result:"構造的対立の決着がつく" },
+      { id:"p-15", work:"パラサイト", no:15, name:"エンディングイメージ",
+        func:"初期状態との対比で、変化した／変わらなかった構造を確定させる",
+        result:"計画（未来をコントロールできる）という幻想だけが残る" },
+    ];
+
+    // ═══════════════════════════════════════════════════════════════
+    // SM-2 HELPERS
+    // ═══════════════════════════════════════════════════════════════
+    const todayStr = () => new Date().toISOString().slice(0,10);
+
+    const addDays = (ds, n) => {
+      const d = new Date(ds + "T12:00:00");
+      d.setDate(d.getDate() + n);
+      return d.toISOString().slice(0,10);
+    };
+
+    const newReview = (id) => ({
+      id, interval:0, reps:0, ef:2.5, due: todayStr()
+    });
+
+    const applyGrade = (r, grade) => {
+      const today = todayStr();
+      if (grade === 0) {
+        return { ...r, interval:1, reps:0, ef: Math.max(1.3, r.ef - 0.2), due: addDays(today,1) };
+      }
+      if (grade === 1) {
+        const ni = r.reps === 0 ? 1 : Math.max(1, Math.ceil(r.interval * 1.2));
+        return { ...r, interval:ni, ef: Math.max(1.3, r.ef - 0.15), due: addDays(today, ni) };
+      }
+      const newReps = r.reps + 1;
+      const ni = newReps === 1 ? 1 : newReps === 2 ? 6 : Math.ceil(r.interval * r.ef);
+      return { ...r, interval:ni, reps:newReps, ef: Math.min(3.0, r.ef + 0.1), due: addDays(today, ni) };
+    };
+
+    const isDue = (r) => r.due <= todayStr();
+
+    // ═══════════════════════════════════════════════════════════════
+    // CSV PARSER
+    // ═══════════════════════════════════════════════════════════════
+    const parseCSV = (text, workName) => {
+      const { data } = Papa.parse(text.trim(), { header:true, skipEmptyLines:true });
+      return data.map((row, i) => ({
+        id: `${workName}-${i+1}-${Date.now()}`,
+        work: workName,
+        no: i + 1,
+        name:   row["ビート名"] || row["name"]   || `Beat ${i+1}`,
+        func:   row["機能"]    || row["function"] || row["func"]   || "",
+        result: row["結果"]    || row["result"]   || "",
+      })).filter(c => c.name && c.func);
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // MAIN COMPONENT
+    // ═══════════════════════════════════════════════════════════════
+    function BeatCards() {
+      const [cards,       setCards]       = useState(INITIAL_CARDS);
+      const [reviews,     setReviews]     = useState({});
+      const [screen,      setScreen]      = useState("home");
+      const [queue,       setQueue]       = useState([]);
+      const [qi,          setQi]          = useState(0);
+      const [flipped,     setFlipped]     = useState(false);
+      const [filter,      setFilter]      = useState("all");
+      const [stats,       setStats]       = useState({ learned:0, again:0 });
+      const [history,     setHistory]     = useState([]);
+      const [selectedIds, setSelectedIds] = useState(() => INITIAL_CARDS.map(c => c.id));
+      const [importWork,  setImportWork]  = useState("");
+      const [showImport,  setShowImport]  = useState(false);
+      const fileRef = useRef();
+      const jsonRef = useRef();
+
+      const works = ["all", ...new Set(cards.map(c => c.work))];
+      const visibleCards = filter === "all" ? cards : cards.filter(c => c.work === filter);
+      const dueCards = visibleCards.filter(c => {
+        const r = reviews[c.id];
+        return r ? isDue(r) : true;
+      });
+      const masteredCount = visibleCards.filter(c => {
+        const r = reviews[c.id];
+        return r && r.reps >= 3 && !isDue(r);
+      }).length;
+
+      const toggleCard = (id) => {
+        setSelectedIds(prev =>
+          prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        );
+      };
+      const allVisibleSelected = visibleCards.length > 0 &&
+        visibleCards.every(c => selectedIds.includes(c.id));
+      const toggleAll = () => {
+        if (allVisibleSelected) {
+          setSelectedIds(prev => prev.filter(id => !visibleCards.find(c => c.id === id)));
+        } else {
+          const toAdd = visibleCards.map(c => c.id);
+          setSelectedIds(prev => [...new Set([...prev, ...toAdd])]);
+        }
+      };
+      const changeFilter = (w) => {
+        setFilter(w);
+        const newVisible = w === "all" ? cards : cards.filter(c => c.work === w);
+        const newDue = newVisible.filter(c => { const r = reviews[c.id]; return r ? isDue(r) : true; });
+        setSelectedIds(newDue.map(c => c.id));
+      };
+      const selectedInView = visibleCards.filter(c => selectedIds.includes(c.id));
+
+      const startSession = useCallback(() => {
+        const q = [...selectedInView].sort((a, b) => a.no - b.no).map(c => c.id);
+        if (q.length === 0) return;
+        setQueue(q);
+        setQi(0);
+        setFlipped(false);
+        setStats({ learned:0, again:0 });
+        setHistory([]);
+        setScreen("study");
+      }, [selectedInView]);
+
+      const currentCard = cards.find(c => c.id === queue[qi]);
+
+      const rate = useCallback((grade) => {
+        const id = queue[qi];
+        const rev = reviews[id] || newReview(id);
+        const updated = applyGrade(rev, grade);
+        setReviews(prev => ({ ...prev, [id]: updated }));
+        if (grade === 0) {
+          setStats(s => ({ ...s, again: s.again + 1 }));
+        } else {
+          setStats(s => ({ ...s, learned: s.learned + 1 }));
+        }
+        setHistory(h => [...h, qi]);
+        const nextIdx = qi + 1;
+        if (nextIdx >= queue.length) {
+          setScreen("done");
+        } else {
+          setQi(nextIdx);
+          setFlipped(false);
+        }
+      }, [qi, queue, reviews]);
+
+      const goBack = useCallback(() => {
+        if (history.length === 0) return;
+        const prevQi = history[history.length - 1];
+        setHistory(h => h.slice(0, -1));
+        setQi(prevQi);
+        setFlipped(false);
+        if (screen === "done") setScreen("study");
+      }, [history, screen]);
+
+      const handleCSV = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const wn = importWork.trim() || file.name.replace(/\.[^.]+$/, "");
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const newCards = parseCSV(ev.target.result, wn);
+          if (newCards.length === 0) { alert("カードが読み込めませんでした。列名を確認してください。"); return; }
+          setCards(prev => [...prev.filter(c => c.work !== wn), ...newCards]);
+          setShowImport(false);
+          setImportWork("");
+          alert(`「${wn}」から ${newCards.length} 枚追加しました！`);
+        };
+        reader.readAsText(file, "UTF-8");
+        e.target.value = "";
+      };
+
+      const saveData = () => {
+        const blob = new Blob([JSON.stringify({ cards, reviews }, null, 2)], { type:"application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `beat-flashcards-${todayStr()}.json`;
+        a.click();
+      };
+
+      const loadData = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const { cards: c, reviews: r } = JSON.parse(ev.target.result);
+            setCards(c); setReviews(r);
+            alert("データを読み込みました！");
+          } catch { alert("ファイルの形式が正しくありません。"); }
+        };
+        reader.readAsText(file);
+        e.target.value = "";
+      };
+
+      // ── HOME ────────────────────────────────────────────────
+      if (screen === "home") return (
+        <div style={css.wrap}>
+          <div style={css.header}>
+            <div style={css.logo}>🎬</div>
+            <h1 style={css.title}>ビートシート<br/>フラッシュカード</h1>
+            <p style={css.sub}>忘却曲線で機能×結果を定着させる</p>
+          </div>
+
+          <div style={css.filterRow}>
+            {works.map(w => (
+              <button key={w} onClick={() => changeFilter(w)}
+                style={{ ...css.filterBtn, ...(filter === w ? css.filterActive : {}) }}>
+                {w === "all" ? "全作品" : w}
+              </button>
+            ))}
+          </div>
+
+          <div style={css.statsRow}>
+            <div style={css.statBox}>
+              <div style={{ ...css.statNum, color:"#f5a623" }}>{dueCards.length}</div>
+              <div style={css.statLabel}>今日の対象</div>
+            </div>
+            <div style={css.statBox}>
+              <div style={{ ...css.statNum, color:"#64d48c" }}>{masteredCount}</div>
+              <div style={css.statLabel}>定着済み</div>
+            </div>
+            <div style={css.statBox}>
+              <div style={{ ...css.statNum, color:"#9b8fcc" }}>{visibleCards.length}</div>
+              <div style={css.statLabel}>総カード</div>
+            </div>
+          </div>
+
+          <button onClick={startSession} disabled={selectedInView.length === 0}
+            style={{ ...css.startBtn, opacity: selectedInView.length === 0 ? 0.4 : 1 }}>
+            {selectedInView.length > 0 ? `学習開始 (${selectedInView.length}枚)` : "カードを選択してください"}
+          </button>
+
+          <div style={css.toolSection}>
+            <div style={css.toolRow}>
+              <button style={css.toolBtn} onClick={() => setShowImport(v => !v)}>
+                ＋ ビートシートを追加
+              </button>
+              <button style={css.toolBtn} onClick={saveData}>
+                💾 データ保存
+              </button>
+              <button style={css.toolBtn} onClick={() => jsonRef.current.click()}>
+                📂 データ読込
+              </button>
+              <input ref={jsonRef} type="file" accept=".json" style={{display:"none"}} onChange={loadData} />
+            </div>
+
+            {showImport && (
+              <div style={css.importBox}>
+                <p style={css.importLabel}>CSVフォーマット：ビート名 / 機能 / 結果（ヘッダー行あり）</p>
+                <input
+                  placeholder="作品名（例：SIP）"
+                  value={importWork}
+                  onChange={e => setImportWork(e.target.value)}
+                  style={css.textInput}
+                />
+                <button style={css.uploadBtn} onClick={() => fileRef.current.click()}>
+                  CSVファイルを選択
+                </button>
+                <input ref={fileRef} type="file" accept=".csv,.tsv" style={{display:"none"}} onChange={handleCSV} />
+              </div>
+            )}
+          </div>
+
+          {visibleCards.length > 0 && (
+            <div style={css.queuePreview}>
+              <div style={css.selectorHeader}>
+                <p style={css.queueTitle}>
+                  カードを選択　<span style={{color:"#f5a623"}}>{selectedInView.length}</span>/{visibleCards.length}枚
+                </p>
+                <button style={css.selectAllBtn} onClick={toggleAll}>
+                  {allVisibleSelected ? "全解除" : "全選択"}
+                </button>
+              </div>
+              {visibleCards.map(c => {
+                const due = !!dueCards.find(d => d.id === c.id);
+                const selected = selectedIds.includes(c.id);
+                const isNew = !reviews[c.id] || reviews[c.id].reps === 0;
+                return (
+                  <div key={c.id} style={{ ...css.selectorItem, opacity: due ? 1 : 0.45 }}
+                    onClick={() => toggleCard(c.id)}>
+                    <div style={{ ...css.checkbox, ...(selected ? css.checkboxOn : {}) }}>
+                      {selected && "✓"}
+                    </div>
+                    {filter === "all" && <span style={css.queueWork}>{c.work}</span>}
+                    <span style={css.queueName}>No.{c.no}　{c.name}</span>
+                    <span style={{
+                      ...css.queueBadge,
+                      ...(isNew ? { background:"rgba(245,166,35,0.2)", color:"#f5a623" } :
+                          !due   ? { background:"rgba(100,100,120,0.2)", color:"#555" } : {})
+                    }}>
+                      {!due ? "復習待" : isNew ? "NEW" : "復習"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+
+      // ── STUDY ───────────────────────────────────────────────
+      if (screen === "study" && currentCard) {
+        const progress = Math.round((qi / queue.length) * 100);
+        const rev = reviews[currentCard.id];
+        const isNew = !rev || rev.reps === 0;
+
+        return (
+          <div style={css.wrap}>
+            <div style={css.studyHeader}>
+              <button onClick={() => setScreen("home")} style={css.backBtn}>← ホーム</button>
+              <span style={css.progressText}>{qi + 1} / {queue.length}</span>
+              <span style={css.workTag}>{currentCard.work}</span>
+            </div>
+
+            <div style={css.progBarWrap}>
+              <div style={{ ...css.progBar, width: `${progress}%` }} />
+            </div>
+
+            <div style={css.cardScene} onClick={() => !flipped && setFlipped(true)}>
+              <div style={{ ...css.cardInner, transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}>
+                <div style={css.cardFace}>
+                  <div style={css.beatBadge}>
+                    {isNew && <span style={css.newTag}>NEW</span>}
+                    <span style={css.beatNo}>No. {currentCard.no}</span>
+                  </div>
+                  <h2 style={css.beatName}>{currentCard.name}</h2>
+                  {!flipped && <p style={css.tapHint}>タップして答えを見る</p>}
+                </div>
+                <div style={{ ...css.cardFace, ...css.cardBack }}>
+                  <div style={css.answerSection}>
+                    <div style={css.answerBlock}>
+                      <div style={css.answerLabel}>機能（物語上の役割）</div>
+                      <div style={css.answerText}>{currentCard.func}</div>
+                    </div>
+                    <div style={css.divider} />
+                    <div style={css.answerBlock}>
+                      <div style={{ ...css.answerLabel, color:"#64d48c" }}>結果</div>
+                      <div style={css.answerText}>{currentCard.result}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {flipped ? (
+              <div style={css.rateRow}>
+                <button style={{ ...css.rateBtn, ...css.rateBad }}  onClick={() => rate(0)}>
+                  <span style={css.rateIcon}>✗</span>
+                  <span style={css.rateLabel}>わからない</span>
+                  <span style={css.rateSub}>明日また</span>
+                </button>
+                <button style={{ ...css.rateBtn, ...css.rateMid }}  onClick={() => rate(1)}>
+                  <span style={css.rateIcon}>△</span>
+                  <span style={css.rateLabel}>うろ覚え</span>
+                  <span style={css.rateSub}>3日後</span>
+                </button>
+                <button style={{ ...css.rateBtn, ...css.rateGood }} onClick={() => rate(2)}>
+                  <span style={css.rateIcon}>✓</span>
+                  <span style={css.rateLabel}>覚えた</span>
+                  <span style={{ ...css.rateSub, color:"#a8f0c0" }}>間隔×{rev?.ef?.toFixed(1) || "2.5"}</span>
+                </button>
+              </div>
+            ) : (
+              <button style={css.flipBtn} onClick={() => setFlipped(true)}>
+                答えを見る
+              </button>
+            )}
+
+            <div style={css.miniStats}>
+              <span style={{ color:"#64d48c" }}>✓ {stats.learned}</span>
+              <span style={{ color:"#888" }}>  |  </span>
+              <span style={{ color:"#f47373" }}>↩ {stats.again}</span>
+            </div>
+
+            {history.length > 0 && (
+              <button style={css.backCardBtn} onClick={goBack}>
+                ← 前のカードに戻る
+              </button>
+            )}
+          </div>
+        );
+      }
+
+      // ── DONE ────────────────────────────────────────────────
+      if (screen === "done") return (
+        <div style={{ ...css.wrap, justifyContent:"center", textAlign:"center" }}>
+          <div style={css.doneEmoji}>🎉</div>
+          <h2 style={css.doneTitle}>セッション完了！</h2>
+          <div style={css.doneStats}>
+            <div style={css.doneStatItem}>
+              <span style={{ ...css.statNum, color:"#64d48c" }}>{stats.learned}</span>
+              <span style={css.statLabel}>覚えた</span>
+            </div>
+            <div style={css.doneStatItem}>
+              <span style={{ ...css.statNum, color:"#f47373" }}>{stats.again}</span>
+              <span style={css.statLabel}>もう一度</span>
+            </div>
+          </div>
+          <p style={css.nextInfo}>次回の復習は忘却曲線に沿って自動でスケジュールされます</p>
+          <button style={css.startBtn} onClick={() => setScreen("home")}>
+            ホームに戻る
+          </button>
+          <button style={{ ...css.toolBtn, marginTop:"12px" }} onClick={saveData}>
+            💾 今すぐ保存する（忘れずに）
+          </button>
+          {history.length > 0 && (
+            <button style={{ ...css.backCardBtn, marginTop:"12px" }} onClick={goBack}>
+              ← 前のカードに戻る
+            </button>
+          )}
+        </div>
+      );
+
+      return null;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // STYLES
+    // ═══════════════════════════════════════════════════════════════
+    const css = {
+      wrap: {
+        minHeight:"100vh",
+        background:"linear-gradient(160deg, #0b0b14 0%, #10101e 100%)",
+        color:"#e4e2f0",
+        fontFamily:'"Hiragino Kaku Gothic Pro","Yu Gothic","Meiryo",sans-serif',
+        display:"flex", flexDirection:"column", alignItems:"center",
+        padding:"env(safe-area-inset-top, 24px) 16px 40px",
+        paddingTop:"max(env(safe-area-inset-top), 24px)",
+        boxSizing:"border-box", maxWidth:"500px", margin:"0 auto",
+      },
+      header: { textAlign:"center", marginBottom:"28px" },
+      logo:   { fontSize:"48px", marginBottom:"8px" },
+      title:  { fontSize:"22px", fontWeight:"700", margin:"0 0 6px", lineHeight:"1.4",
+                background:"linear-gradient(90deg, #f5a623, #f0c674)", WebkitBackgroundClip:"text",
+                WebkitTextFillColor:"transparent" },
+      sub:    { fontSize:"13px", color:"#7a7890", margin:0 },
+
+      filterRow:   { display:"flex", gap:"8px", flexWrap:"wrap", justifyContent:"center", marginBottom:"24px" },
+      filterBtn:   { padding:"6px 16px", borderRadius:"20px", border:"1px solid #2e2d42",
+                     background:"#16162a", color:"#9b99b0", cursor:"pointer", fontSize:"13px" },
+      filterActive:{ background:"#f5a623", color:"#0b0b14", borderColor:"#f5a623", fontWeight:"700" },
+
+      statsRow:  { display:"flex", gap:"16px", marginBottom:"28px" },
+      statBox:   { background:"#16162a", border:"1px solid #2e2d42", borderRadius:"12px",
+                   padding:"16px 24px", textAlign:"center", minWidth:"80px" },
+      statNum:   { fontSize:"28px", fontWeight:"700", lineHeight:1 },
+      statLabel: { fontSize:"12px", color:"#7a7890", marginTop:"4px" },
+
+      startBtn: {
+        width:"100%", maxWidth:"340px", padding:"16px", borderRadius:"14px",
+        background:"linear-gradient(135deg, #f5a623, #e8912a)", color:"#0b0b14",
+        fontWeight:"700", fontSize:"17px", border:"none", cursor:"pointer",
+        marginBottom:"24px", boxShadow:"0 4px 20px rgba(245,166,35,0.3)",
+      },
+
+      toolSection: { width:"100%", maxWidth:"340px" },
+      toolRow:     { display:"flex", gap:"8px", flexWrap:"wrap", justifyContent:"center", marginBottom:"12px" },
+      toolBtn: {
+        padding:"8px 14px", borderRadius:"8px", border:"1px solid #2e2d42",
+        background:"#16162a", color:"#9b99b0", cursor:"pointer", fontSize:"12px",
+      },
+      importBox:   { background:"#16162a", border:"1px solid #2e2d42", borderRadius:"12px",
+                     padding:"16px", marginBottom:"12px" },
+      importLabel: { fontSize:"11px", color:"#7a7890", marginBottom:"10px" },
+      textInput:   { width:"100%", padding:"8px 12px", borderRadius:"8px",
+                     border:"1px solid #3a3850", background:"#0e0e1c", color:"#e4e2f0",
+                     fontSize:"14px", marginBottom:"8px", boxSizing:"border-box" },
+      uploadBtn:   { padding:"8px 20px", borderRadius:"8px", border:"none",
+                     background:"#f5a623", color:"#0b0b14", fontWeight:"700",
+                     fontSize:"13px", cursor:"pointer" },
+
+      queuePreview: { width:"100%", maxWidth:"340px", marginTop:"16px" },
+      queueTitle:   { fontSize:"13px", color:"#7a7890", margin:0 },
+      queueWork:    { fontSize:"11px", color:"#7a7890", minWidth:"56px" },
+      queueName:    { fontSize:"13px", flex:1 },
+      queueBadge:   { fontSize:"11px", padding:"2px 7px", borderRadius:"10px",
+                      background:"#2a2840", color:"#9b8fcc", whiteSpace:"nowrap" },
+
+      selectorHeader: { display:"flex", alignItems:"center", justifyContent:"space-between",
+                        marginBottom:"10px" },
+      selectAllBtn:   { fontSize:"12px", padding:"4px 12px", borderRadius:"8px",
+                        border:"1px solid #3a3850", background:"#1e1d30",
+                        color:"#9b99b0", cursor:"pointer" },
+      selectorItem:   { display:"flex", alignItems:"center", gap:"8px", padding:"8px 10px",
+                        background:"#16162a", borderRadius:"8px", marginBottom:"6px",
+                        cursor:"pointer", userSelect:"none", transition:"background 0.15s" },
+      checkbox:       { width:"18px", height:"18px", borderRadius:"5px",
+                        border:"1.5px solid #3a3850", background:"#0e0e1c",
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        fontSize:"12px", color:"#0b0b14", flexShrink:0 },
+      checkboxOn:     { background:"#f5a623", borderColor:"#f5a623", fontWeight:"700" },
+
+      studyHeader: { display:"flex", alignItems:"center", width:"100%", maxWidth:"400px",
+                     marginBottom:"12px" },
+      backBtn:     { background:"none", border:"none", color:"#7a7890", cursor:"pointer",
+                     fontSize:"13px", padding:"4px 8px" },
+      progressText:{ flex:1, textAlign:"center", fontSize:"14px", color:"#9b99b0" },
+      workTag:     { fontSize:"12px", color:"#7a7890", padding:"3px 10px",
+                     borderRadius:"10px", border:"1px solid #2e2d42" },
+
+      progBarWrap: { width:"100%", maxWidth:"400px", height:"4px", background:"#1e1d30",
+                     borderRadius:"4px", marginBottom:"28px", overflow:"hidden" },
+      progBar:     { height:"100%", background:"linear-gradient(90deg, #f5a623, #64d48c)",
+                     borderRadius:"4px", transition:"width 0.4s" },
+
+      cardScene: {
+        width:"100%", maxWidth:"400px", height:"260px",
+        perspective:"1200px", cursor:"pointer", marginBottom:"24px",
+      },
+      cardInner: {
+        width:"100%", height:"100%", position:"relative",
+        transformStyle:"preserve-3d", transition:"transform 0.55s cubic-bezier(0.4,0,0.2,1)",
+      },
+      cardFace: {
+        position:"absolute", inset:0, borderRadius:"20px",
+        background:"linear-gradient(145deg, #1a1930, #151428)",
+        border:"1px solid #2e2d45", padding:"28px 28px 20px",
+        backfaceVisibility:"hidden", WebkitBackfaceVisibility:"hidden",
+        display:"flex", flexDirection:"column", justifyContent:"center", alignItems:"center",
+        boxShadow:"0 8px 40px rgba(0,0,0,0.5)",
+      },
+      cardBack: { transform:"rotateY(180deg)" },
+
+      beatBadge: { display:"flex", alignItems:"center", gap:"8px", marginBottom:"16px" },
+      newTag:    { fontSize:"11px", padding:"3px 8px", borderRadius:"10px",
+                   background:"#f5a623", color:"#0b0b14", fontWeight:"700" },
+      beatNo:    { fontSize:"13px", color:"#7a7890" },
+      beatName:  { fontSize:"26px", fontWeight:"700", textAlign:"center",
+                   lineHeight:"1.4", margin:0 },
+      tapHint:   { marginTop:"20px", fontSize:"12px", color:"#4a4860" },
+
+      answerSection: { width:"100%", display:"flex", flexDirection:"column", gap:"0" },
+      answerBlock:   { padding:"4px 0" },
+      answerLabel:   { fontSize:"11px", color:"#f5a623", fontWeight:"700",
+                       letterSpacing:"0.05em", marginBottom:"6px" },
+      answerText:    { fontSize:"15px", lineHeight:"1.6", color:"#e4e2f0" },
+      divider:       { height:"1px", background:"#2e2d45", margin:"14px 0" },
+
+      flipBtn: {
+        padding:"14px 48px", borderRadius:"12px",
+        background:"linear-gradient(135deg, #2a2840, #332f50)",
+        color:"#c8c4e8", border:"1px solid #3e3a5a",
+        fontSize:"16px", fontWeight:"600", cursor:"pointer",
+        marginBottom:"16px",
+      },
+      rateRow: { display:"flex", gap:"10px", width:"100%", maxWidth:"400px", marginBottom:"16px" },
+      rateBtn: {
+        flex:1, padding:"12px 8px", borderRadius:"12px", border:"none",
+        cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:"2px",
+      },
+      rateBad:  { background:"rgba(244,115,115,0.15)", border:"1px solid rgba(244,115,115,0.3)" },
+      rateMid:  { background:"rgba(245,166,35,0.15)",  border:"1px solid rgba(245,166,35,0.3)"  },
+      rateGood: { background:"rgba(100,212,140,0.15)", border:"1px solid rgba(100,212,140,0.3)" },
+      rateIcon: { fontSize:"20px" },
+      rateLabel:{ fontSize:"13px", fontWeight:"600", color:"#e4e2f0" },
+      rateSub:  { fontSize:"11px", color:"#7a7890" },
+
+      miniStats: { fontSize:"14px", color:"#555", marginBottom:"10px" },
+
+      backCardBtn: {
+        background:"none", border:"1px solid #2e2d42", borderRadius:"8px",
+        color:"#7a7890", fontSize:"12px", padding:"6px 16px", cursor:"pointer",
+        marginTop:"4px",
+      },
+
+      doneEmoji:    { fontSize:"64px", marginBottom:"16px" },
+      doneTitle:    { fontSize:"24px", fontWeight:"700", margin:"0 0 24px",
+                      background:"linear-gradient(90deg,#f5a623,#64d48c)",
+                      WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" },
+      doneStats:    { display:"flex", gap:"32px", marginBottom:"20px" },
+      doneStatItem: { display:"flex", flexDirection:"column", alignItems:"center", gap:"4px" },
+      nextInfo:     { fontSize:"13px", color:"#7a7890", textAlign:"center",
+                      maxWidth:"280px", lineHeight:"1.6", marginBottom:"24px" },
+    };
+
+    // ── Mount ───────────────────────────────────────────────────
+    ReactDOM.createRoot(document.getElementById("root")).render(<BeatCards />);
+  </script>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./service-worker.js")
+          .then(r => console.log("SW registered:", r.scope))
+          .catch(e => console.error("SW error:", e));
+      });
+    }
+  </script>
+</body>
+</html>
