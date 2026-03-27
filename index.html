@@ -31,7 +31,50 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useRef, useCallback } = React;
+    const { useState, useRef, useCallback, useEffect } = React;
+
+    // ═══════════════════════════════════════════════════════════════
+    // GOOGLE SHEETS 連携
+    // ═══════════════════════════════════════════════════════════════
+    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQR59rBSiwnbqiMddN-oe0VIQmclT-f6_UeOY-0OC9x2WWnHF43RUCcPtsP5cU2g5Ws9epMYNDM3RPT/pub?output=csv";
+
+    const parseSheetCSV = (text) => {
+      const { data } = Papa.parse(text.trim(), { header: false, skipEmptyLines: true });
+      const SKIP = new Set(["", "No", "name", "ビート名"]);
+      const workCount = {};
+      const cards = [];
+      data.forEach((row, i) => {
+        const workName = (row[0] || "").trim();
+        const beatName = (row[1] || "").trim();
+        if (SKIP.has(workName) || !workName || !beatName || SKIP.has(beatName)) return;
+        workCount[workName] = (workCount[workName] || 0) + 1;
+        cards.push({
+          id: `sheet-${i}`,
+          work: workName,
+          no: workCount[workName],
+          name: beatName,
+          content: (row[2] || "").trim(),
+          func:    (row[3] || "").trim(),
+          result:  (row[4] || "").trim(),
+        });
+      });
+      return cards.filter(c => c.name && (c.func || c.content));
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // LOCAL STORAGE
+    // ═══════════════════════════════════════════════════════════════
+    const LS_CARDS   = "beatcards-v2-cards";
+    const LS_REVIEWS = "beatcards-v2-reviews";
+
+    const initCards = () => {
+      try { const s = localStorage.getItem(LS_CARDS); return s ? JSON.parse(s) : INITIAL_CARDS; }
+      catch { return INITIAL_CARDS; }
+    };
+    const initReviews = () => {
+      try { const s = localStorage.getItem(LS_REVIEWS); return s ? JSON.parse(s) : {}; }
+      catch { return {}; }
+    };
 
     // ═══════════════════════════════════════════════════════════════
     // BEAT DATA — パラサイト
@@ -150,8 +193,9 @@
     // MAIN COMPONENT
     // ═══════════════════════════════════════════════════════════════
     function BeatCards() {
-      const [cards,       setCards]       = useState(INITIAL_CARDS);
-      const [reviews,     setReviews]     = useState({});
+      const [cards,       setCards]       = useState(initCards);
+      const [reviews,     setReviews]     = useState(initReviews);
+      const [syncing,     setSyncing]     = useState(false);
       const [screen,      setScreen]      = useState("home");
       const [queue,       setQueue]       = useState([]);
       const [qi,          setQi]          = useState(0);
@@ -159,11 +203,19 @@
       const [filter,      setFilter]      = useState("all");
       const [stats,       setStats]       = useState({ learned:0, again:0 });
       const [history,     setHistory]     = useState([]);
-      const [selectedIds, setSelectedIds] = useState(() => INITIAL_CARDS.map(c => c.id));
+      const [selectedIds, setSelectedIds] = useState(() => initCards().map(c => c.id));
       const [importWork,  setImportWork]  = useState("");
       const [showImport,  setShowImport]  = useState(false);
       const fileRef = useRef();
       const jsonRef = useRef();
+
+      // ── localStorage 自動保存 ─────────────────────────────
+      useEffect(() => {
+        try { localStorage.setItem(LS_CARDS, JSON.stringify(cards)); } catch {}
+      }, [cards]);
+      useEffect(() => {
+        try { localStorage.setItem(LS_REVIEWS, JSON.stringify(reviews)); } catch {}
+      }, [reviews]);
 
       const works = ["all", ...new Set(cards.map(c => c.work))];
       const visibleCards = filter === "all" ? cards : cards.filter(c => c.work === filter);
@@ -211,6 +263,26 @@
       }, [selectedInView]);
 
       const currentCard = cards.find(c => c.id === queue[qi]);
+
+      // ── Google Sheets 同期 ───────────────────────────────
+      const syncFromSheet = async () => {
+        setSyncing(true);
+        try {
+          const res = await fetch(SHEET_CSV_URL);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const text = await res.text();
+          const newCards = parseSheetCSV(text);
+          if (newCards.length === 0) throw new Error("データが取得できませんでした");
+          const sheetWorks = new Set(newCards.map(c => c.work));
+          setCards(prev => [...prev.filter(c => !sheetWorks.has(c.work)), ...newCards]);
+          const workList = [...sheetWorks].join("・");
+          alert(`✓ ${newCards.length}枚を更新しました\n（${workList}）`);
+        } catch (e) {
+          alert("シートの取得に失敗しました：" + e.message);
+        } finally {
+          setSyncing(false);
+        }
+      };
 
       const rate = useCallback((grade) => {
         const id = queue[qi];
@@ -320,15 +392,22 @@
           </button>
 
           <div style={css.toolSection}>
+            <button
+              style={{ ...css.syncBtn, opacity: syncing ? 0.6 : 1 }}
+              onClick={syncFromSheet}
+              disabled={syncing}>
+              {syncing ? "取得中…" : "🔄 Googleシートから更新"}
+            </button>
+
             <div style={css.toolRow}>
               <button style={css.toolBtn} onClick={() => setShowImport(v => !v)}>
-                ＋ ビートシートを追加
+                ＋ CSV追加
               </button>
               <button style={css.toolBtn} onClick={saveData}>
-                💾 データ保存
+                💾 バックアップ
               </button>
               <button style={css.toolBtn} onClick={() => jsonRef.current.click()}>
-                📂 データ読込
+                📂 復元
               </button>
               <input ref={jsonRef} type="file" accept=".json" style={{display:"none"}} onChange={loadData} />
             </div>
@@ -552,6 +631,12 @@
       },
 
       toolSection: { width:"100%", maxWidth:"340px" },
+      syncBtn: {
+        width:"100%", padding:"12px", borderRadius:"12px", marginBottom:"12px",
+        background:"linear-gradient(135deg, #1a2a1a, #1e3a1e)",
+        border:"1px solid #3a6a3a", color:"#64d48c",
+        fontWeight:"700", fontSize:"14px", cursor:"pointer",
+      },
       toolRow:     { display:"flex", gap:"8px", flexWrap:"wrap", justifyContent:"center", marginBottom:"12px" },
       toolBtn: {
         padding:"8px 14px", borderRadius:"8px", border:"1px solid #2e2d42",
