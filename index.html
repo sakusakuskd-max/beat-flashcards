@@ -46,7 +46,7 @@
       data.forEach((row, i) => {
         const workName = (row[0] || "").trim();
         const beatName = (row[1] || "").trim();
-        if (SKIP.has(workName) || !workName || !beatName || SKIP.has(beatName)) return;
+        if (SKIP.has(workName) || !workName || !beatName || SKIP.has(beatName) || /^\d+$/.test(workName)) return;
         workCount[workName] = (workCount[workName] || 0) + 1;
         cards.push({
           id: `sheet-${i}`,
@@ -395,7 +395,7 @@
               style={{ ...css.syncBtn, opacity: syncing ? 0.6 : 1 }}
               onClick={syncFromSheet}
               disabled={syncing}>
-              {syncing ? "取得中…" : "🔄 Googleシートから更新"}
+              {syncing ? "取得中…" : "🔄 カードを更新"}
             </button>
 
             <div style={css.toolRow}>
@@ -407,6 +407,17 @@
               </button>
               <button style={css.toolBtn} onClick={() => jsonRef.current.click()}>
                 📂 復元
+              </button>
+              <button style={{ ...css.toolBtn, color:"#f47373" }} onClick={() => {
+                if (confirm("全データをリセットしますか？（復元不可）")) {
+                  localStorage.removeItem(LS_CARDS);
+                  localStorage.removeItem(LS_REVIEWS);
+                  setCards(INITIAL_CARDS);
+                  setReviews({});
+                  alert("リセットしました。シートから更新してください。");
+                }
+              }}>
+                🗑 リセット
               </button>
               <input ref={jsonRef} type="file" accept=".json" style={{display:"none"}} onChange={loadData} />
             </div>
