@@ -273,9 +273,8 @@
           const text = await res.text();
           const newCards = parseSheetCSV(text);
           if (newCards.length === 0) throw new Error("データが取得できませんでした");
-          const sheetWorks = new Set(newCards.map(c => c.work));
-          setCards(prev => [...prev.filter(c => !sheetWorks.has(c.work)), ...newCards]);
-          const workList = [...sheetWorks].join("・");
+          const workList = [...new Set(newCards.map(c => c.work))].join("・");
+          setCards(newCards);
           alert(`✓ ${newCards.length}枚を更新しました\n（${workList}）`);
         } catch (e) {
           alert("シートの取得に失敗しました：" + e.message);
