@@ -697,7 +697,8 @@
                      borderRadius:"4px", transition:"width 0.4s" },
 
       cardScene: {
-        width:"100%", maxWidth:"400px", height:"320px",
+        width:"100%", maxWidth:"400px",
+        height:"min(440px, calc(100vh - 260px))",
         perspective:"1200px", cursor:"pointer", marginBottom:"24px",
       },
       cardInner: {
@@ -712,7 +713,12 @@
         display:"flex", flexDirection:"column", justifyContent:"center", alignItems:"center",
         boxShadow:"0 8px 40px rgba(0,0,0,0.5)",
       },
-      cardBack: { transform:"rotateY(180deg)" },
+      cardBack: {
+        transform:"rotateY(180deg)",
+        justifyContent:"flex-start",
+        overflowY:"auto",
+        WebkitOverflowScrolling:"touch",
+      },
 
       beatBadge: { display:"flex", alignItems:"center", gap:"8px", marginBottom:"16px" },
       newTag:    { fontSize:"11px", padding:"3px 8px", borderRadius:"10px",
